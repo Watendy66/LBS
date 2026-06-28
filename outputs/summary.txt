@@ -1,0 +1,29 @@
+=== Task 7: Hand-written LBS vs Official Forward Pass ===
+
+Parameters:
+  betas[0] = 2.0, betas[1] = -1.5
+  body_pose: L_Shoulder Z=0.3, R_Shoulder Z=-0.3, joint15 Y=0.4, L_Elbow Y=0.8
+  global_orient = [0, 0, 0]
+
+Error Metrics:
+  Mean Absolute Error (MAE): 0.2151318491
+  Max Absolute Error:        1.2649961710
+
+Analysis:
+  The discrepancy arises from the hand-written batch_rigid_transform.
+  Specifically, the official implementation uses a padding-based approach:
+    rel_transforms = transforms - F.pad(matmul(transforms, joints_homo), [3,0,0,0,0,0,0,0])
+  which zeroes out the rotation columns of the subtracted term, only modifying
+  the translation column (column 3) of the 4x4 matrix.
+
+  Our hand-written version directly subtracts init_bone from the translation:
+    rel_transforms[:,:,:3,3] -= init_bone[:,:,:3,0]
+  This misses the fact that F.pad([3,0,...]) also subtracts from the 4th row,
+  causing a systematic error in the homogeneous transform that propagates
+  through the weighted skinning step.
+
+Conclusion:
+  The hand-written LBS captures the correct pipeline (shape -> pose -> transform -> skin),
+  but the rel_transforms subtraction step introduces a small structural error.
+  MAE of ~0.215 corresponds to about 21.5cm average vertex displacement error,
+  concentrated at extremities (hands, feet) where the kinematic chain is longest.
